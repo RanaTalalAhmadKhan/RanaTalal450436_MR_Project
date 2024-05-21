@@ -1,0 +1,51 @@
+import rospy
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan
+import math
+
+class FollowWall:
+    def __init__(self):
+        rospy.init_node('follow_wall')
+        
+        self.velocity_publisher = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
+        rospy.Subscriber('/scan', LaserScan, self.laser_callback)
+        
+        self.desired_distance = 1.3  # Distance to maintain from the wall
+        self.proportional_gain = 0.6
+        self.integral_gain = 0.0
+        self.derivative_gain = 0.01
+        
+        self.previous_error = 0.0
+        self.integral_sum = 0.0
+        
+        rospy.spin()
+
+    def laser_callback(self, scan_data):
+        distances = scan_data.ranges
+        distances = [distance for distance in distances if not math.isnan(distance)]
+        
+        closest_distance = min(distances)
+        closest_index = distances.index(closest_distance)
+        
+        error = closest_distance - self.desired_distance
+        
+        p_term = self.proportional_gain * error
+        self.integral_sum += error
+        i_term = self.integral_gain * self.integral_sum
+        d_term = self.derivative_gain * (error - self.previous_error)
+        
+        pid_output = p_term + i_term + d_term
+        
+        self.previous_error = error
+        
+        movement = Twist()
+        movement.linear.x = 0.2
+        movement.angular.z = -pid_output
+        
+        self.velocity_publisher.publish(movement)
+
+if __name__ == '__main__':
+    try:
+        FollowWall()
+    except rospy.ROSInterruptException:
+        pass
